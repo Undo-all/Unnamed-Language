@@ -69,30 +69,38 @@ struct parse_err parse_expr(struct token* toks, struct state* state, struct expr
     while ( toks[state->loc].type != NEWLINE_TOK && 
             toks[state->loc].type != END_TOK     && 
             toks[state->loc].type != INDENT_TOK  && 
-            toks[state->loc].type != RPAREN_TOK  ){
+            toks[state->loc].type != RPAREN_TOK  &&
+            toks[state->loc].type != DEDENT_TOK  ){
+        printf("Current token: ");
+        display_token(toks[state->loc]);
+        printf("\n");
         ret->apply.list = realloc(ret->apply.list, sizeof(struct expr) * ++ret->apply.len);
         if (!PARSE_SUCCESSFUL(err = parse_arg(toks, state, &ret->apply.list[ret->apply.len-1])))
             return err;
-        //++state->loc;
     }
 
     if (toks[state->loc].type == INDENT_TOK) {
         // It's a definition now.
         ret->type = DEFINE;
-        if (toks[0].type != IDENT_TOK)
-            printf("SHIT");
-        ret->define.name = ret->apply.list[0].ident;
-        ret->define.num_args = ret->apply.len;
-        ret->define.args = malloc(sizeof(char*) * ret->apply.len);
+        if (ret->apply.list[0].type != IDENT)
+            printf("SHIT\n");
 
-        for (int i = 1; i < ret->apply.len; ++i) {
-            if (ret->apply.list[i].type != IDENT)
+        int len = ret->apply.len;
+        struct expr* exprs = ret->apply.list;
+
+        ret->define.name = exprs[0].ident;
+        ret->define.num_args = len - 1;
+        ret->define.args = malloc(sizeof(char*) * (ret->apply.len - 1));
+
+        for (int i = 1; i < len; ++i) {
+            if (exprs[i].type != IDENT)
                 printf("SHIT");
-
-            strcpy(ret->define.args[i-1], ret->apply.list[i].ident);
+            
+            ret->define.args[i-1] = exprs[i].ident;
+            //strcpy(ret->define.args[i-1], ret->apply.list[i].ident);
         }
 
-        free(ret->apply.list);
+        free(exprs);
 
         struct parse_err err;
         ret->define.body = malloc(sizeof(struct expr));
@@ -101,7 +109,7 @@ struct parse_err parse_expr(struct token* toks, struct state* state, struct expr
         ++state->indent;
         ++state->loc;
 
-        while (state->indent != indent && toks[state->loc].type != END_TOK) {
+        while (!(state->indent == indent || toks[state->loc].type == END_TOK)) {
             ret->define.body = realloc(ret->define.body, sizeof(struct expr) * ++ret->define.body_len);
             err = parse_expr(toks, state, &ret->define.body[ret->define.body_len-1]);
             if (!PARSE_SUCCESSFUL(err))
@@ -126,10 +134,8 @@ struct parse_err parse_arg(struct token* toks, struct state* state, struct expr*
         ++state->parens;
         ++state->loc;
         struct parse_err err;
-        printf("Parsing subexpression!\n");
         if (!PARSE_SUCCESSFUL(err = parse_expr(toks, state, ret)))
             return err;
-        printf("Exiting parse of subexpression...\n");
 
         if (toks[state->loc].type != RPAREN_TOK) {
             return MISMATCHED_PARENS;
